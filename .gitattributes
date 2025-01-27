@@ -1,0 +1,1 @@
+pipeline/e2e_playwright.sh eol=lf chmod=+x
