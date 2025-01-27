@@ -1,0 +1,59 @@
+name: Playwright Tests
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+jobs:
+  e2e_playwright:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [ 1, 2, 3 ]
+        shardTotal: [ 3 ]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+    - name: Install dependencies
+      run: npm ci
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+
+    - name: Download the failed tests if they are present 👀
+      uses: actions/download-artifact@v4
+      with:
+        name: e2e_playwright_failed_tests_${{ github.run_id }}_${{ matrix.shardIndex }}
+        path: ./test-results
+      continue-on-error: true
+
+    - name: Run Playwright tests
+      run: pipeline/e2e_playwright.sh ${{ matrix.shardIndex }} ${{ matrix.shardTotal }} ${{ github.run_attempt }}
+
+    - name: Artifacts Playwright failed tests 👀
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: e2e_playwright_failed_tests_${{ github.run_id }}_${{ matrix.shardIndex }}
+        retention-days: 1
+        path: |
+          ./test-results/.last-run.json
+        if-no-files-found: ignore
+        include-hidden-files: true
+        overwrite: true
+
+    - name: Merge into HTML Report
+      if: success() || failure()
+      run: npx playwright merge-reports --reporter html ./blob-report
+
+    - name: Upload HTML report
+      if: success() || failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: html-report-attempt-${{ github.run_attempt }}-${{ matrix.shardIndex }}
+        path: playwright-report
+        retention-days: 14
+
